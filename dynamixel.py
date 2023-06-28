@@ -79,128 +79,219 @@ else:
     getch()
     quit()
 
+OpModes = {
+    "Current":0,
+    "Velocity":1,
+    "Position":3,
+    "ExtendedPosition":4,
+    "CurrentBasedPosition":5,
+    "PWM":16
+}
+
+invOpModes = {v: k for k, v in OpModes.items()}
+
 class dynamixel(object):
-    def __init__(self, ID, OperatingMode = "Position"):
+    def __init__(self, ID, op = 3):
         self.ID = ID
-        self.setMode(OperatingMode)
+        self.OperatingMode = op
+        self.setMode(self.OperatingMode)
 
     def getID(self):
         return self.ID
+    
+    def getOperatingMode(self):
+        return self.OperatingMode
+    
+    def setMode(self, mode):
+        if type(mode) == type("string"):
+            self.OperatingMode = OpModes[mode]
 
-    def setMode(self, OperatingMode):        
-        if OperatingMode == "Current":
-            OpMode = 0
-        elif OperatingMode == "Velocity":
-            OpMode = 1
-        elif OperatingMode == "Position":
-            OpMode = 3
-        elif OperatingMode == "ExtendedPosition":
-            OpMode = 4
-        elif OperatingMode == "CurrentBasedPosition":
-            OpMode = 5
-        elif OperatingMode == "PWM":
-            OpMode = 16
-        else:
-            print("Operating Mode has Defualted to 'Position' \n Please input one of the following: \n Current, \n Velocity, \n Position, \n ExtendedPosition, \n CurrentBasedPosition, \n PWM")
-                    
-        dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, self.ID, ADDR_OPERATING_MODE, OpMode)
+        elif type(mode) == type(1):
+            self.OperatingMode = mode
+
+        self.updateMode()
+
+    def updateMode(self):
+        if self.CheckEnabled:
+            self.DisableTorque()
+            dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, self.ID, ADDR_OPERATING_MODE, self.OperatingMode)
+            if dxl_comm_result != COMM_SUCCESS:
+                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+                return False
+            elif dxl_error != 0:
+                print("%s" % packetHandler.getRxPacketError(dxl_error))
+                return False
+            self.EnableTorque()
+        print("OperatingMode is now", invOpModes[self.OperatingMode])
+        return True
+    
+    def getMode(self):
+        mode, dxl_comm_result, dxl_error = packetHandler.read1ByteTxRx(portHandler, self.ID, ADDR_OPERATING_MODE)
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+            return False
         elif dxl_error != 0:
             print("%s" % packetHandler.getRxPacketError(dxl_error))
-        else:
-            self.OperatingMode = OperatingMode
-            print("Mode is now OperatingMode", self.OperatingMode)
-
+            return False
+        print("Mode:",(invOpModes[mode]))
+        return True
+    
     def EnableTorque(self):
         dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, self.ID, ADDR_TORQUE_ENABLE, TORQUE_ENABLE)
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+            return False
         elif dxl_error != 0:
             print("%s" % packetHandler.getRxPacketError(dxl_error))
-        else:
-            print("Dynamixel has been successfully connected")
+            return False
+        print("Dynamixel has been successfully connected")
+        return True
     
     def DisableTorque(self):
         dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, self.ID, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+            return False
         elif dxl_error != 0:
             print("%s" % packetHandler.getRxPacketError(dxl_error))
-            print("Dynamixel has been disconnected")
+            return False
+        print("Dynamixel has been disconnected")
+        return True
 
+    def CheckEnabled(self):
+        enabled, dxl_comm_result, dxl_error = packetHandler.read1ByteTxRx(portHandler, self.ID, ADDR_TORQUE_ENABLE)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
+        
+        if enabled == 1:
+            return True
+        elif enabled == 0:
+            return False
+        
     def setPosition(self, dxl_goal_position):
-        if (MINIMUM_POSITION_VALUE <= dxl_goal_position) and (dxl_goal_position <= MAXIMUM_POSITION_VALUE):
+        if (self.OperatingMode != 3) and (self.OperatingMode != 4) and (self.OperatingMode != 5):
+            print("Motor must be in one of these OperatingModes:",invOpModes[3],invOpModes[4],invOpModes[5])
+            return False
+        elif (self.OperatingMode == 3):
+            if (MINIMUM_POSITION_VALUE <= dxl_goal_position) and (dxl_goal_position <= MAXIMUM_POSITION_VALUE):
+                dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(portHandler, self.ID, ADDR_GOAL_POSITION, dxl_goal_position)
+                if dxl_comm_result != COMM_SUCCESS:
+                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+                elif dxl_error != 0:
+                    print("%s" % packetHandler.getRxPacketError(dxl_error))
+                return True
+            else:
+                print("Position must be in the range of ", MINIMUM_POSITION_VALUE, "-", MAXIMUM_POSITION_VALUE)
+                return False
+        else:
             dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(portHandler, self.ID, ADDR_GOAL_POSITION, dxl_goal_position)
             if dxl_comm_result != COMM_SUCCESS:
                 print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
             elif dxl_error != 0:
                 print("%s" % packetHandler.getRxPacketError(dxl_error))
-        else:
-            print("Position must be in the range of ", MINIMUM_POSITION_VALUE, "-", MAXIMUM_POSITION_VALUE)
+            return True
 
     def getPosition(self):
         dxl_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, self.ID, ADDR_PRESENT_POSITION)
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+            return False
         elif dxl_error != 0:
             print("%s" % packetHandler.getRxPacketError(dxl_error))
-
+            return False
         print("[ID:%03d] PresPos:%03d" % (self.ID, dxl_present_position))
+        return True
 
     def setVelocity(self, dxl_goal_velocity):
-        if (MINIMUM_VELOCITY_VALUE <= dxl_goal_velocity) and (dxl_goal_velocity <= MAXIMUM_VELOCITY_VALUE):
-            dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(portHandler, self.ID, ADDR_GOAL_VELOCITY, dxl_goal_velocity)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
+        if self.OperatingMode != 1:
+            print("Motor must be in one of these OperatingModes:",invOpModes[1])
+            return False
         else:
-            print("Position must be in the range of ", MINIMUM_VELOCITY_VALUE, "-", MAXIMUM_VELOCITY_VALUE)
+            if (MINIMUM_VELOCITY_VALUE <= dxl_goal_velocity) and (dxl_goal_velocity <= MAXIMUM_VELOCITY_VALUE):
+                dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(portHandler, self.ID, ADDR_GOAL_VELOCITY, dxl_goal_velocity)
+                if dxl_comm_result != COMM_SUCCESS:
+                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+                    return False
+                elif dxl_error != 0:
+                    print("%s" % packetHandler.getRxPacketError(dxl_error))
+                    return False
+                return True
+            else:
+                print("Position must be in the range of ", MINIMUM_VELOCITY_VALUE, "-", MAXIMUM_VELOCITY_VALUE)
+                return False
 
     def getVelocity(self):
         dxl_present_velocity, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, self.ID, ADDR_PRESENT_VELOCITY)
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+            return False
         elif dxl_error != 0:
             print("%s" % packetHandler.getRxPacketError(dxl_error))
-
+            return False
         print("[ID:%03d] PresVel:%03d" % (self.ID, dxl_present_velocity))
+        return True
 
     def setCurrent(self, dxl_goal_current):
-        if (MINIMUM_CURRENT_VALUE <= dxl_goal_current) and (dxl_goal_current <= MAXIMUM_CURRENT_VALUE):
-            dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, self.ID, ADDR_GOAL_CURRENT, dxl_goal_current)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
+        if (self.OperatingMode != 0) and ((self.OperatingMode != 5)):
+            print("Motor must be in one of these OperatingModes:",invOpModes[0],invOpModes[5])
+            return False
         else:
-            print("Position must be in the range of ", MINIMUM_CURRENT_VALUE, "-", MAXIMUM_CURRENT_VALUE)
-    
+            if (MINIMUM_CURRENT_VALUE <= dxl_goal_current) and (dxl_goal_current <= MAXIMUM_CURRENT_VALUE):
+                dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, self.ID, ADDR_GOAL_CURRENT, dxl_goal_current)
+                if dxl_comm_result != COMM_SUCCESS:
+                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+                    return False
+                elif dxl_error != 0:
+                    print("%s" % packetHandler.getRxPacketError(dxl_error))
+                    return False
+                return True
+            else:
+                print("Position must be in the range of ", MINIMUM_CURRENT_VALUE, "-", MAXIMUM_CURRENT_VALUE)
+                return False
+        
     def getCurrent(self):
         dxl_present_current, dxl_comm_result, dxl_error = packetHandler.read2ByteTxRx(portHandler, self.ID, ADDR_PRESENT_CURRENT)
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+            return False
         elif dxl_error != 0:
             print("%s" % packetHandler.getRxPacketError(dxl_error))
-
+            return False
         print("[ID:%03d] PresCur:%03d" % (self.ID, dxl_present_current))
+        return True
+
+    def setPosAndCurrent(self, current, position):
+        self.setCurrent(current)
+        self.setPosition(position)
 
     def setPWM(self, dxl_goal_PWM):
-        if (MINIMUM_PWM_VALUE <= dxl_goal_PWM) and (dxl_goal_PWM <= MAXIMUM_PWM_VALUE):
-            dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, self.ID, ADDR_GOAL_PWM, dxl_goal_PWM)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
+        if self.OperatingMode != 16:
+            print("Motor must be in one of these OperatingModes:",invOpModes[16])
+            return False
         else:
-            print("Position must be in the range of ", MINIMUM_PWM_VALUE, "-", MAXIMUM_PWM_VALUE)
+            if (MINIMUM_PWM_VALUE <= dxl_goal_PWM) and (dxl_goal_PWM <= MAXIMUM_PWM_VALUE):
+                dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, self.ID, ADDR_GOAL_PWM, dxl_goal_PWM)
+                if dxl_comm_result != COMM_SUCCESS:
+                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+                    return False
+                elif dxl_error != 0:
+                    print("%s" % packetHandler.getRxPacketError(dxl_error))
+                    return False
+                return True
+            else:
+                print("Position must be in the range of ", MINIMUM_PWM_VALUE, "-", MAXIMUM_PWM_VALUE)
+                return False
     
     def getPWM(self):
         dxl_present_PWM, dxl_comm_result, dxl_error = packetHandler.read2ByteTxRx(portHandler, self.ID, ADDR_PRESENT_PWM)
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+            return False
         elif dxl_error != 0:
             print("%s" % packetHandler.getRxPacketError(dxl_error))
-
+            return False
         print("[ID:%03d] PresPMW:%03d" % (self.ID, dxl_present_PWM))
+        return True
+    
